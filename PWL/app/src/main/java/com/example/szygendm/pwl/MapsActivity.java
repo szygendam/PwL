@@ -9,9 +9,11 @@ import android.os.Bundle;
 import android.support.annotation.*;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.tasks.*;
 import com.google.android.gms.common.api.*;
 import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationSettingsRequest;
 import com.google.android.gms.location.LocationSettingsResponse;
 import com.google.android.gms.location.LocationServices;
@@ -29,8 +31,12 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     private GoogleMap mMap;
     private FusedLocationProviderClient mFusedLocationClient;
+    private LocationCallback mLocationCallback;
+    private LocationRequest mLocationRequest;
     private final String _PACKAGE = "com.example.szygendm.pwl";
-    protected static final int _REQUEST_CHECK_SETTINGS = 0x1;
+    private static final int _REQUEST_CHECK_SETTINGS = 0x1;
+    private static final String REQUESTING_LOCATION_UPDATES_KEY = "requesting-location-updates-key";
+    private boolean mRequestingLocationUpdates;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,6 +48,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         mapFragment.getMapAsync(this);
 
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+        updateValuesFromBundle(savedInstanceState);
     }
 
 
@@ -64,6 +71,19 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(dom,(float)16.0));
         getLastLocation();
         createLocationRequest();
+
+        mLocationCallback = new LocationCallback() { //TODO this need to be in onCreate() ?
+            @Override
+            public void onLocationResult(LocationResult locationResult) {
+                for (Location location : locationResult.getLocations()) {
+                    // Update UI with location data
+                    // ...
+                    LatLng curPosition = new LatLng(location.getLatitude(), location.getLongitude());
+                    mMap.addMarker(new MarkerOptions().position(curPosition));
+                    mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(curPosition,(float)16.0));
+                }
+            };
+        };
     }
 
     public void getLastLocation(){
@@ -121,7 +141,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                             // Show the dialog by calling startResolutionForResult(),
                             // and check the result in onActivityResult().
                             ResolvableApiException resolvable = (ResolvableApiException) e;
-                            resolvable.startResolutionForResult(MainActivity.this, //TODO
+                            resolvable.startResolutionForResult(MapsActivity.this,
                                     _REQUEST_CHECK_SETTINGS);
                         } catch (IntentSender.SendIntentException sendEx) {
                             // Ignore the error.
@@ -135,4 +155,54 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             }
         });
     }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (mRequestingLocationUpdates) {
+            startLocationUpdates();
+        }
+    }
+
+    private void startLocationUpdates() {
+        PackageManager packageManager = getApplicationContext().getPackageManager();
+        if (packageManager.checkPermission(android.Manifest.permission.ACCESS_FINE_LOCATION, _PACKAGE) == PackageManager.PERMISSION_GRANTED ) { //TODO
+            mFusedLocationClient.requestLocationUpdates(mLocationRequest,
+                    mLocationCallback,
+                    null /* Looper */);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        stopLocationUpdates();
+    }
+
+    private void stopLocationUpdates() {
+        mFusedLocationClient.removeLocationUpdates(mLocationCallback);
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        outState.putBoolean(REQUESTING_LOCATION_UPDATES_KEY,
+                mRequestingLocationUpdates);
+        // ...
+        super.onSaveInstanceState(outState);
+    }
+
+    private void updateValuesFromBundle(Bundle savedInstanceState) {
+        // Update the value of mRequestingLocationUpdates from the Bundle.
+        if (savedInstanceState.keySet().contains(REQUESTING_LOCATION_UPDATES_KEY)) {
+            mRequestingLocationUpdates = savedInstanceState.getBoolean(
+                    REQUESTING_LOCATION_UPDATES_KEY);
+        }
+
+        // ...
+
+        // Update UI to match restored state
+        //updateUI(); TODO
+    }
+
+
 }
